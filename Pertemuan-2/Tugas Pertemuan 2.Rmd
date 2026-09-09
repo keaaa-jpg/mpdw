@@ -1,1 +1,691 @@
+---
+title: "Tugas Pertemuan 2"
+output:
+  html_document: 
+    theme: lumen
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    code_folding: hide
+  pdf_document: default
+  word_document: default
+---
+
+# Library
+```{r}
+library("forecast")
+library("graphics")
+library("TTR")
+library("TSA")
+library("rio")
+```
+
+# Import Data
+```{r}
+data<-import("Data Kelompok 11.xlsx", sheet="Lembar1")
+names(data)[names(data) == "CES9093161101"] <- "jmlh_pegawai"
+head(data)
+```
+
+# Eksplorasi Data
+```{r}
+View(data)
+str(data)
+dim(data)
+```
+## Mengubah data agar terbaca sebagai data deret waktu dengan fungsi `ts()` .
+
+```{r}
+data.ts <- ts(data$jmlh_pegawai)
+```
+
+## Menampilkan ringkasan data.
+
+```{r}
+summary(data.ts)
+```
+## Membuat plot data deret waktu
+
+```{r}
+ts.plot(data.ts, xlab="Time Period ", ylab="jmlh_pegawai", 
+        main = "Time Series Plot")
+points(data.ts)
+
+#menyimpan plot
+dev.copy(png, "plot_data.png")
+dev.off()
+```
+
+# Moving Average
+
+## Pembagian Data
+
+Pembagian data latih dan data uji dilakukan dengan perbandingan 80% data latih dan 20% data uji.
+
+```{r}
+# hitung jumlah data
+n <- nrow(data)
+
+# tentukan batas 80%
+n_train <- floor(0.8 * n)
+
+# bagi data
+training_ma <- data[1:n_train, ]
+testing_ma  <- data[(n_train+1):n, ]
+
+# ubah ke time series
+train_ma.ts <- ts(training_ma$jmlh_pegawai)
+test_ma.ts  <- ts(testing_ma$jmlh_pegawai)
+
+```
+
+## Eksplorasi Keseluruhan Data, Data Latih, Data Uji
+
+```{r}
+#eksplorasi keseluruhan data
+plot(data.ts, col="red",main="Plot Semua Data")
+points(data.ts)
+
+#eksplorasi data latih
+plot(train_ma.ts, col="blue",main="Plot Data Latih")
+points(train_ma.ts)
+
+#eksplorasi data uji
+plot(test_ma.ts, col="blue",main="Plot Data Uji")
+points(test_ma.ts)
+```
+
+## Eksplorasi Keseluruhan Data, Data Latih, Data Uji (ggplot2)
+
+```{r}
+library(ggplot2)
+ggplot() + 
+  geom_line(data = training_ma, aes(x = Period, y = jmlh_pegawai, col = "Data Latih")) +
+  geom_line(data = testing_ma, aes(x = Period, y = jmlh_pegawai, col = "Data Uji")) +
+  labs(x = "Periode Waktu", y = "jmlh_pegawai", color = "Legend") +
+   scale_colour_manual(name="Keterangan:", breaks = c("Data Latih", "Data Uji"),
+                      values = c("blue", "red")) + 
+  theme_bw() + theme(legend.position = "bottom",
+                     plot.caption = element_text(hjust=0.5, size=12))
+ 
+```
+
+### Single Moving Average (SMA)
+
+```{r}
+acf(data.ts, lag.max = 24, main = "ACF Data")
+```
+
+Dari grafik ACF, semua nilai ACF posiif dan turun secara perlahan dari lag 1 sampai lag 24, tidak ada lonjakan khusus di lag tertentu. Data memiliki pola tren, bukan pola musiman. Metode SMA tetap dilakukan dengan meninjau `m` berapa yang menghasilkan MSE data uji paling kecil.
+
+```{r}
+m_values <- c(3, 4, 6, 12)
+
+hasil_sma <- data.frame(m = m_values, MSE_train = NA, MSE_test = NA)
+
+for (i in seq_along(m_values)) {
+  m <- m_values[i]
+  
+  sma_i   <- SMA(train_ma.ts, n = m)
+  ramal_i <- c(NA, sma_i)
+  
+  # akurasi data latih (warmup = m+1 periode pertama)
+  error_train <- train_ma.ts - ramal_i[1:length(train_ma.ts)]
+  MSE_train   <- mean(error_train[(m+1):length(train_ma.ts)]^2)
+  
+  # akurasi data uji (forecast SMA konstan = nilai pemulusan terakhir)
+  n_test_sma   <- length(test_ma.ts)
+  ramalan_test <- rep(ramal_i[length(ramal_i)], n_test_sma)
+  error_test   <- test_ma.ts - ramalan_test
+  MSE_test     <- mean(error_test^2)
+  
+  hasil_sma$MSE_train[i] <- MSE_train
+  hasil_sma$MSE_test[i]  <- MSE_test
+}
+
+hasil_sma
+```
+Dalam hal ini akan dilakukan pemulusan dengan parameter `m=3`.
+
+```{r}
+data.sma<-SMA(train_ma.ts, n=3)
+data.sma
+```
+
+```{r}
+data.ramal<-c(NA,data.sma)
+data.ramal #forecast 1 periode ke depan
+```
+
+Selanjutnya dilakukan peramalan sebanyak 35 periode sesuai dengan jumlah data uji.
+
+```{r}
+data.gab <- cbind(
+  aktual=c(data.ts),
+  pemulusan=c(data.sma, rep(NA, 35)),
+  ramalan=c(data.ramal, rep(data.ramal[length(data.ramal)], 34)))
+
+data.gab #forecast 35 periode ke depan
+```
+
+Adapun plot data deret waktu dari hasil peramalan yang dilakukan adalah sebagai berikut.
+
+```{r}
+ts.plot(data.ts, xlab="Time Period ", ylab="jmlh_pegawai", main= "SMA N=3")
+points(data.ts)
+lines(data.gab[,2],col="green",lwd=2)
+lines(data.gab[,3],col="red",lwd=2)
+legend("topleft",c("data aktual","data pemulusan","data peramalan"), lty=8, col=c("black","green","red"), cex=0.5)
+```
+
+Selanjutnya perhitungan akurasi dilakukan dengan ukuran akurasi *Sum Squares Error* (SSE), *Mean Square Error* (MSE) dan *Mean Absolute Percentage Error* (MAPE). Perhitungan akurasi dilakukan baik pada data latih maupun pada data uji.
+
+#### Akurasi Data Latih
+
+```{r}
+#Menghitung nilai keakuratan data latih
+error_train.sma = train_ma.ts-data.ramal[1:length(train_ma.ts)]
+
+SSE_train.sma = sum(error_train.sma[4:length(train_ma.ts)]^2)
+MSE_train.sma = mean(error_train.sma[4:length(train_ma.ts)]^2)
+MAPE_train.sma = mean(abs((error_train.sma[4:length(train_ma.ts)]/train_ma.ts[4:length(train_ma.ts)])*100))
+
+akurasi_train.sma <- matrix(c(SSE_train.sma, MSE_train.sma, MAPE_train.sma))
+row.names(akurasi_train.sma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi_train.sma) <- c("Akurasi m = 3")
+akurasi_train.sma
+```
+Dalam hal ini nilai MAPE data latih pada metode pemulusan SMA sekitar 0.966%, nilai ini dapat dikategorikan sebagai nilai akurasi yang sangat baik. Selanjutnya dilakukan perhitungan nilai MAPE data uji pada metode pemulusan SMA.
+
+#### Akurasi Data Uji
+
+```{r}
+#Menghitung nilai keakuratan data uji
+error_test.sma = test_ma.ts-data.gab[137:171,3]
+
+SSE_test.sma = sum(error_test.sma^2)
+MSE_test.sma = mean(error_test.sma^2)
+MAPE_test.sma = mean(abs((error_test.sma/test_ma.ts*100)))
+
+akurasi_test.sma <- matrix(c(SSE_test.sma, MSE_test.sma, MAPE_test.sma))
+row.names(akurasi_test.sma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi_test.sma) <- c("Akurasi m = 3")
+akurasi_test.sma
+```
+Perhitungan akurasi menggunakan data latih menghasilkan nilai MAPE 8.669% yang kurang dari 10% sehingga nilai akurasi ini dapat dikategorikan sebagai sangat baik.
+
+### Double Moving Average (DMA)
+
+```{r}
+dma <- SMA(data.sma, n = 3)
+At <- 2*data.sma - dma
+Bt <- 2/(3-1)*(data.sma - dma)
+data.dma<- At+Bt
+data.ramal2<- c(NA, data.dma)
+
+t = 1:35
+f = c()
+
+for (i in t) {
+  f[i] = At[length(At)] + Bt[length(Bt)]*(i)
+}
+
+data.gab2 <- cbind(aktual = c(data.ts), 
+                   pemulusan1 = c(data.sma,rep(NA,35)),
+                   pemulusan2 = c(dma, rep(NA,35)),
+                   At = c(At, rep(NA,35)), 
+                   Bt = c(Bt,rep(NA,35)),
+                   ramalan = c(data.ramal2, f[-1]))
+data.gab2
+```
+
+Hasil pemulusan menggunakan metode DMA divisualisasikan sebagai berikut
+
+```{r}
+ts.plot(data.ts, xlab="Time Period ", ylab="jmlh_pegawai", main= "DMA N=3 Data Pegawai")
+points(data.ts)
+lines(data.gab2[,3],col="green",lwd=2)
+lines(data.gab2[,6],col="red",lwd=2)
+legend("topleft",c("data aktual","data pemulusan","data peramalan"), lty=8, col=c("black","green","red"), cex=0.8)
+```
+
+Selanjutnya perhitungan akurasi dilakukan baik pada data latih maupun data uji. Perhitungan akurasi dilakukan dengan ukuran akurasi SSE, MSE dan MAPE.
+
+#### Akurasi Data Latih
+
+```{r}
+#Menghitung nilai keakuratan data latih
+error_train.dma = train_ma.ts-data.ramal2[1:length(train_ma.ts)]
+
+SSE_train.dma = sum(error_train.dma[6:length(train_ma.ts)]^2)
+MSE_train.dma = mean(error_train.dma[6:length(train_ma.ts)]^2)
+MAPE_train.dma = mean(abs((error_train.dma[6:length(train_ma.ts)]/train_ma.ts[6:length(train_ma.ts)])*100))
+
+akurasi_train.dma <- matrix(c(SSE_train.dma, MSE_train.dma, MAPE_train.dma))
+row.names(akurasi_train.dma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi_train.dma) <- c("Akurasi m = 3")
+akurasi_train.dma
+```
+Perhitungan akurasi pada data latih menggunakan nilai MAPE menghasilkan nilai MAPE 0.377% yang kurang dari 10% sehingga dikategorikan sangat baik. Selanjutnya, perhitungan nilai akurasi dilakukan pada data uji.
+
+#### Akurasi Data Uji
+
+```{r}
+#Menghitung nilai keakuratan data uji
+error_test.dma = test_ma.ts-data.gab2[137:171,6]
+SSE_test.dma = sum(error_test.dma^2)
+MSE_test.dma = mean(error_test.dma^2)
+MAPE_test.dma = mean(abs((error_test.dma/test_ma.ts*100)))
+
+akurasi_test.dma <- matrix(c(SSE_test.dma, MSE_test.dma, MAPE_test.dma))
+row.names(akurasi_test.dma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi_test.dma) <- c("Akurasi m = 3")
+akurasi_test.dma
+```
+Perhitungan akurasi menggunakan data latih menghasilkan nilai MAPE 6.474% yang kurang dari 10% sehingga nilai akurasi ini dapat dikategorikan sebagai sangat baik.
+
+Pada data latih dan data uji, metode DMA lebih baik dibandingkan dengan metode SMA.
+
+## Exponential Smoothing
+
+### Pembagian Data
+
+Pembagian data latih dan data uji dilakukan dengan perbandingan 80% data latih dan 20% data uji.
+
+```{r}
+# jumlah baris data
+n <- nrow(data)
+
+# hitung batas 80%
+n_train <- floor(0.8 * n)
+
+# bagi data
+training <- data[1:n_train, ]
+testing  <- data[(n_train+1):n, ]
+
+# ubah ke time series
+train.ts <- ts(training$jmlh_pegawai)
+test.ts  <- ts(testing$jmlh_pegawai)
+```
+
+### Eksplorasi
+
+Eksplorasi dilakukan dengan membuat plot data deret waktu untuk keseluruhan data, data latih, dan data uji.
+
+```{r}
+#eksplorasi data
+plot(data.ts, col="black",main="Plot semua data")
+points(data.ts)
+
+plot(train.ts, col="red",main="Plot data latih")
+points(train.ts)
+
+plot(test.ts, col="blue",main="Plot data uji")
+points(test.ts)
+```
+
+```{r}
+#Eksplorasi dengan GGPLOT
+library(ggplot2)
+ggplot() + 
+  geom_line(data = training, aes(x = Period, y = jmlh_pegawai, col = "Data Latih")) +
+  geom_line(data = testing, aes(x = Period, y = jmlh_pegawai, col = "Data Uji")) +
+  labs(x = "Periode Waktu", y = "jmlh_pegawai", color = "Legend") +
+  scale_colour_manual(name="Keterangan:", breaks = c("Data Latih", "Data Uji"),
+                      values = c("blue", "red")) + 
+  theme_bw() + theme(legend.position = "bottom",
+                     plot.caption = element_text(hjust=0.5, size=12))
+```
+
+### Single Exponential Smoothing (SES)
+
+```{r}
+#Cara 1 (fungsi ses)
+ses.1 <- ses(train.ts, h = 35, alpha = 0.2)
+plot(ses.1)
+ses.1
+
+ses.2 <- ses(train.ts, h = 35, alpha = 0.7)
+plot(ses.2)
+ses.2
+```
+
+Untuk mendapatkan gambar hasil pemulusan pada data latih dengan fungsi `ses()` , perlu digunakan fungsi `autoplot()` dan `autolayer()` dari *library packages* `ggplot2` .
+
+```{r}
+autoplot(ses.1) +
+  autolayer(fitted(ses.1), series="Fitted") +
+  ylab("jmlh_pegawai") + xlab("Period")
+
+autoplot(ses.2) +
+  autolayer(fitted(ses.2), series="Fitted") +
+  ylab("jmlh_pegawai") + xlab("Period")
+```
+
+Selanjutnya akan digunakan fungsi `HoltWinters()` dengan nilai inisialisasi parameter dan panjang periode peramalan yang sama dengan fungsi `ses()` .
+
+```{r}
+#Cara 2 (fungsi Holtwinter)
+ses1<- HoltWinters(train.ts, gamma = FALSE, beta = FALSE, alpha = 0.2)
+plot(ses1)
+
+#ramalan
+ramalan1<- forecast(ses1, h=35)
+ramalan1
+
+ses2<- HoltWinters(train.ts, gamma = FALSE, beta = FALSE, alpha = 0.7)
+plot(ses2)
+
+#ramalan
+ramalan2<- forecast(ses2, h=35)
+ramalan2
+```
+
+Jika menggunakan nilai parameter $\alpha$ yang optimum.
+
+```{r}
+#SES
+ses.opt <- ses(train.ts, h = 35, alpha = NULL)
+plot(ses.opt)
+ses.opt
+
+#Lamda Optimum Holt Winter
+HWopt<- HoltWinters(train.ts, gamma = FALSE, beta = FALSE, alpha = NULL)
+HWopt
+plot(HWopt)
+
+#ramalan
+ramalanopt<- forecast(HWopt, h=35)
+ramalanopt
+```
+
+Setelah dilakukan peramalan, akan dilakukan perhitungan keakuratan hasil peramalan. Perhitungan akurasi ini dilakukan baik pada data latih dan data uji.
+
+#### Akurasi Data Latih
+
+```{r}
+#Keakuratan Metode
+#Pada data training
+
+# SES dengan alpha = 0.2
+SSE1<-ses1$SSE
+MSE1<-ses1$SSE/length(train.ts)
+RMSE1<-sqrt(MSE1)
+
+akurasi1 <- matrix(c(SSE1,MSE1,RMSE1))
+row.names(akurasi1)<- c("SSE", "MSE", "RMSE")
+colnames(akurasi1) <- c("Akurasi lamda=0.2")
+akurasi1
+
+# SES dengan alpha = 0.7
+SSE2<-ses2$SSE
+MSE2<-ses2$SSE/length(train.ts)
+RMSE2<-sqrt(MSE2)
+
+akurasi2 <- matrix(c(SSE2,MSE2,RMSE2))
+row.names(akurasi2)<- c("SSE", "MSE", "RMSE")
+colnames(akurasi2) <- c("Akurasi lamda=0.7")
+akurasi2
+```
+
+```{r}
+#Cara Manual
+# Alpha = 0.2
+fitted1<-ramalan1$fitted
+sisaan1<-ramalan1$residuals
+head(sisaan1)
+
+resid1<-training$jmlh_pegawai-ramalan1$fitted
+head(resid1)
+
+SSE.1=sum(sisaan1[2:length(train.ts)]^2)
+SSE.1
+
+MSE.1 = SSE.1/length(train.ts)
+MSE.1
+
+MAPE.1 = sum(abs(sisaan1[2:length(train.ts)]/train.ts[2:length(train.ts)])*
+               100)/length(train.ts)
+MAPE.1
+
+akurasi.1 <- matrix(c(SSE.1,MSE.1,MAPE.1))
+row.names(akurasi.1)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi.1) <- c("Akurasi lamda=0.2")
+akurasi.1
+
+# Alpha = 0.7
+fitted2<-ramalan2$fitted
+sisaan2<-ramalan2$residuals
+head(sisaan2)
+
+resid2<-training$jmlh_pegawai-ramalan2$fitted
+head(resid2)
+
+SSE.2=sum(sisaan2[2:length(train.ts)]^2)
+SSE.2
+
+MSE.2 = SSE.2/length(train.ts)
+MSE.2
+
+MAPE.2 = sum(abs(sisaan2[2:length(train.ts)]/train.ts[2:length(train.ts)])*
+               100)/length(train.ts)
+MAPE.2
+
+akurasi.2 <- matrix(c(SSE.2,MSE.2,MAPE.2))
+row.names(akurasi.2)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi.2) <- c("Akurasi lamda=0.7")
+akurasi.2
+```
+
+Berdasarkan nilai SSE, MSE, RMSE, dan MAPE di antara kedua parameter, nilai parameter $\lambda=0,7$ menghasilkan akurasi yang lebih baik dibanding $\lambda=0,2$ . Hal ini dilihat dari nilai masing-masing ukuran akurasi yang lebih kecil. Berdasarkan nilai MAPE-nya, hasil ini dapat dikategorikan sebagai peramalan sangat baik.
+
+#### Akurasi Data Uji
+
+```{r}
+# jumlah observasi uji
+n_test <- nrow(testing)
+
+# error (ramalan - aktual), samakan panjang dan tipe numeric
+e1   <- as.numeric(ramalan1$mean)[1:n_test] - as.numeric(testing$jmlh_pegawai)
+e2   <- as.numeric(ramalan2$mean)[1:n_test] - as.numeric(testing$jmlh_pegawai)
+eopt <- as.numeric(ramalanopt$mean)[1:n_test] - as.numeric(testing$jmlh_pegawai)
+
+# SSE / MSE / RMSE untuk masing-masing model (abaikan NA)
+SSEtesting1  <- sum(e1^2,  na.rm = TRUE)
+MSEtesting1  <- mean(e1^2, na.rm = TRUE)
+RMSEtesting1 <- sqrt(MSEtesting1)
+
+SSEtesting2  <- sum(e2^2,  na.rm = TRUE)
+MSEtesting2  <- mean(e2^2, na.rm = TRUE)
+RMSEtesting2 <- sqrt(MSEtesting2)
+
+SSEtestingopt  <- sum(eopt^2,  na.rm = TRUE)
+MSEtestingopt  <- mean(eopt^2, na.rm = TRUE)
+RMSEtestingopt <- sqrt(MSEtestingopt)
+
+# Tabel ringkas
+akurasitesting_SSE <- matrix(c(SSEtesting1, SSEtesting2, SSEtestingopt),
+                             nrow = 3,
+                             dimnames = list(c("SSE1","SSE2","SSEopt"), "Nilai"))
+akurasitesting_MSE <- matrix(c(MSEtesting1, MSEtesting2, MSEtestingopt),
+                             nrow = 3,
+                             dimnames = list(c("MSE1","MSE2","MSEopt"), "Nilai"))
+akurasitesting_RMSE <- matrix(c(RMSEtesting1, RMSEtesting2, RMSEtestingopt),
+                              nrow = 3,
+                              dimnames = list(c("RMSE1","RMSE2","RMSEopt"), "Nilai"))
+
+akurasitesting_SSE
+akurasitesting_MSE
+akurasitesting_RMSE
+```
+```{r}
+MAPEtesting1  <- mean(abs(e1/as.numeric(testing$jmlh_pegawai))*100, na.rm = TRUE)
+MAPEtesting2  <- mean(abs(e2/as.numeric(testing$jmlh_pegawai))*100, na.rm = TRUE)
+MAPEtestingopt<- mean(abs(eopt/as.numeric(testing$jmlh_pegawai))*100, na.rm = TRUE)
+```
+
+
+```{r}
+accuracy(ramalan1, testing$jmlh_pegawai)
+accuracy(ramalan2, testing$jmlh_pegawai)
+accuracy(ramalanopt, testing$jmlh_pegawai)
+```
+
+Berdasarkan nilai akurasi pada data uji, parameter $\alpha$ optimum yang menggunakan HWopt memberikan hasil terbaik.
+
+### Double Exponential Smoothing (DES)
+
+```{r}
+#Lamda=0.2 dan gamma=0.2
+des.1<- HoltWinters(train.ts, gamma = FALSE, beta = 0.2, alpha = 0.2)
+plot(des.1)
+
+#ramalan
+ramalandes1<- forecast(des.1, h=35)
+ramalandes1
+
+#Lamda=0.6 dan gamma=0.3
+des.2<- HoltWinters(train.ts, gamma = FALSE, beta = 0.3, alpha = 0.6)
+plot(des.2)
+
+#ramalan
+ramalandes2<- forecast(des.2, h=35)
+ramalandes2
+```
+
+Selanjutnya jika ingin membandingkan plot data latih dan data uji adalah sebagai berikut.
+
+```{r}
+plot(data.ts)
+lines(des.1$fitted[,1], lty=2, col="blue")
+lines(ramalandes1$mean, col="red")
+```
+
+Untuk mendapatkan nilai parameter optimum dari DES, argumen `alpha` dan `beta` dapat dibuat `NULL` seperti berikut.
+
+```{r}
+#Lamda dan gamma optimum
+des.opt<- HoltWinters(train.ts, gamma = FALSE)
+des.opt
+plot(des.opt)
+
+#ramalan
+ramalandesopt<- forecast(des.opt, h=35)
+ramalandesopt
+```
+
+Selanjutnya akan dilakukan perhitungan akurasi pada data latih maupun data uji dengan ukuran akurasi SSE, MSE dan MAPE.
+
+#### Akurasi Data Latih
+
+```{r}
+#Akurasi Data Training
+ssedes.train1<-des.1$SSE
+msedes.train1<-ssedes.train1/length(train.ts)
+sisaandes1<-ramalandes1$residuals
+head(sisaandes1)
+
+mapedes.train1 <- sum(abs(sisaandes1[3:length(train.ts)]/train.ts[3:length(train.ts)])
+                      *100)/length(train.ts)
+
+akurasides.1 <- matrix(c(ssedes.train1,msedes.train1,mapedes.train1))
+row.names(akurasides.1)<- c("SSE", "MSE", "MAPE")
+colnames(akurasides.1) <- c("Akurasi lamda=0.2 dan gamma=0.2")
+akurasides.1
+
+ssedes.train2<-des.2$SSE
+msedes.train2<-ssedes.train2/length(train.ts)
+sisaandes2<-ramalandes2$residuals
+head(sisaandes2)
+
+mapedes.train2 <- sum(abs(sisaandes2[3:length(train.ts)]/train.ts[3:length(train.ts)])
+                      *100)/length(train.ts)
+
+akurasides.2 <- matrix(c(ssedes.train2,msedes.train2,mapedes.train2))
+row.names(akurasides.2)<- c("SSE", "MSE", "MAPE")
+colnames(akurasides.2) <- c("Akurasi lamda=0.6 dan gamma=0.3")
+akurasides.2
+```
+Hasil akurasi dari data latih didapatkan skenario 2 dengan lamda=0.6 dan gamma=0.3 memiliki hasil yang lebih baik. Namun untuk kedua skenario dapat dikategorikan peramalan sangat baik berdasarkan nilai MAPE-nya.
+
+#### Akurasi Data Uji
+
+```{r}
+#Akurasi Data Testing
+selisihdes1<-ramalandes1$mean-testing$jmlh_pegawai
+selisihdes1
+
+SSEtestingdes1<-sum(selisihdes1^2)
+MSEtestingdes1<-SSEtestingdes1/length(testing$jmlh_pegawai)
+MAPEtestingdes1<-sum(abs(selisihdes1/testing$jmlh_pegawai)*100)/length(testing$jmlh_pegawai)
+
+selisihdes2<-ramalandes2$mean-testing$jmlh_pegawai
+selisihdes2
+
+SSEtestingdes2<-sum(selisihdes2^2)
+MSEtestingdes2<-SSEtestingdes2/length(testing$jmlh_pegawai)
+MAPEtestingdes2<-sum(abs(selisihdes2/testing$jmlh_pegawai)*100)/length(testing$jmlh_pegawai)
+
+selisihdesopt<-ramalandesopt$mean-testing$jmlh_pegawai
+selisihdesopt
+
+SSEtestingdesopt<-sum(selisihdesopt^2)
+MSEtestingdesopt<-SSEtestingdesopt/length(testing$jmlh_pegawai)
+MAPEtestingdesopt<-sum(abs(selisihdesopt/testing$jmlh_pegawai)*100)/length(testing$jmlh_pegawai)
+
+akurasitestingdes <-
+  matrix(c(SSEtestingdes1,MSEtestingdes1,MAPEtestingdes1,SSEtestingdes2,MSEtestingdes2,
+           MAPEtestingdes2,SSEtestingdesopt,MSEtestingdesopt,MAPEtestingdesopt),
+         nrow=3,ncol=3)
+row.names(akurasitestingdes)<- c("SSE", "MSE", "MAPE")
+colnames(akurasitestingdes) <- c("des ske1","des ske2","des opt")
+akurasitestingdes
+```
+#### Perbandingan SES dan DES
+
+```{r}
+MSEfull <-
+  matrix(c(MSEtesting1,MSEtesting2,MSEtestingopt,MSEtestingdes1,MSEtestingdes2,
+           MSEtestingdesopt),nrow=3,ncol=2)
+row.names(MSEfull)<- c("ske 1", "ske 2", "ske opt")
+colnames(MSEfull) <- c("ses","des")
+MSEfull
+```
+#### Perbandingan SMA, DMA, SES, DES
+
+**Perbandingan Berdasarkan MSE**
+
+```{r}
+perbandingan_akhir <- data.frame(
+  Metode = c("SMA (m=3)", "DMA (m=3)", 
+             "SES (lamda=0.2)", "SES (lamda=0.7)", "SES (optimal)",
+             "DES (ske1)", "DES (ske2)", "DES (optimal)"),
+  MSE_Uji = c(MSE_test.sma, MSE_test.dma,
+              MSEtesting1, MSEtesting2, MSEtestingopt,
+              MSEtestingdes1, MSEtestingdes2, MSEtestingdesopt)
+)
+
+perbandingan_akhir[order(perbandingan_akhir$MSE_Uji), ]
+```
+**Perbandingan Berdasarkan MAPE**
+
+```{r}
+perbandingan_akhir_mape <- data.frame(
+  Metode = c("SMA (m=3)", "DMA (m=3)", 
+             "SES (lamda=0.2)", "SES (lamda=0.7)", "SES (optimal)",
+             "DES (ske1)", "DES (ske2)", "DES (optimal)"),
+  MAPE_Uji = c(MAPE_test.sma, MAPE_test.dma,
+               MAPEtesting1, MAPEtesting2, MAPEtestingopt,
+               MAPEtestingdes1, MAPEtestingdes2, MAPEtestingdesopt)
+)
+
+perbandingan_akhir_mape[order(perbandingan_akhir_mape$MAPE_Uji), ]
+```
+
+# Kesimpulan Metode Terbaik Untuk Data
+
+Berdasarkan nilai MSE maupun MAPE pada data uji, kedua metrik akurasi menunjukkan urutan peringkat metode yang konsisten. **Metode Double Exponential Smoothing (DES)** dengan parameter optimal memberikan hasil peramalan terbaik (MSE = 17.195,27 & MAPE = 2,86%). Dengan demikian, hasil dari MSE dan MAPE memperkuat kesimpulan bahwa Metode DES optimal merupakan metode pemulusan terbaik untuk data jumlah pegawai pendidikan pemerintah daerah pada bagian data ini, sesuai dengan karakteristik data yang memiliki pola tren jangka panjang.
+
+
+
 

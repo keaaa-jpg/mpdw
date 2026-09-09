@@ -1,1 +1,447 @@
+---
+title: "Latihan 1"
+output:
+  html_document: 
+    theme: lumen
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    code_folding: hide
+  pdf_document: default
+  word_document: default
+---
+
+```{r}
+library(forecast)
+library(graphics)
+library(TTR)
+library(TSA)
+library(rio)
+library(ggplot2)
+```
+
+```{r}
+data_kurs <- import("Kurs_JISDOR_Lengkap_ForwardFill.xlsx", sheet = "Kurs JISDOR Lengkap")
+names(data_kurs)[names(data_kurs) == "Kurs (IDR)"] <- "Kurs"
+
+data_kurs$Periode <- 1:nrow(data_kurs)
+
+head(data_kurs)
+```
+
+```{r}
+View(data_kurs)
+str(data_kurs)
+dim(data_kurs)
+
+data_kurs.ts <- ts(data_kurs$Kurs)
+summary(data_kurs.ts)
+
+ts.plot(data_kurs.ts, xlab="Time Period", ylab="Kurs (IDR)",
+        main = "Time Series Plot Kurs USD/IDR")
+points(data_kurs.ts)
+
+dev.copy(png, "plot_data_kurs.png")
+dev.off()
+```
+```{r}
+# hitung jumlah data
+n <- nrow(data_kurs)
+
+# tentukan batas 80%
+n_train <- floor(0.8 * n)
+n_test  <- n - n_train
+
+# bagi data
+training <- data_kurs[1:n_train, ]
+testing  <- data_kurs[(n_train+1):n, ]
+
+# ubah ke time series
+train.ts <- ts(training$Kurs)
+test.ts  <- ts(testing$Kurs)
+```
+
+```{r}
+#eksplorasi keseluruhan data
+plot(data_kurs.ts, col="red", main="Plot semua data")
+points(data_kurs.ts)
+
+#eksplorasi data latih
+plot(train.ts, col="blue", main="Plot data latih")
+points(train.ts)
+
+#eksplorasi data uji
+plot(test.ts, col="blue", main="Plot data uji")
+points(test.ts)
+```
+
+```{r}
+ggplot() +
+  geom_line(data = training, aes(x = Periode, y = Kurs, col = "Data Latih")) +
+  geom_line(data = testing, aes(x = Periode, y = Kurs, col = "Data Uji")) +
+  labs(x = "Periode Waktu", y = "Kurs (IDR)", color = "Legend") +
+  scale_colour_manual(name="Keterangan:", breaks = c("Data Latih", "Data Uji"),
+                      values = c("blue", "red")) +
+  theme_bw() + theme(legend.position = "bottom",
+                     plot.caption = element_text(hjust=0.5, size=12))
+```
+# Moving Average
+## SMA
+```{r}
+data.sma <- SMA(train.ts, n=4)
+data.sma
+
+data.ramal <- c(NA, data.sma)
+data.ramal #forecast 1 periode ke depan
+
+data.gab <- cbind(
+  aktual = c(data_kurs.ts),
+  pemulusan = c(data.sma, rep(NA, n_test)),
+  ramalan = c(data.ramal, rep(data.ramal[length(data.ramal)], n_test - 1)))
+
+data.gab
+```
+
+```{r}
+ts.plot(data_kurs.ts, xlab="Time Period", ylab="Kurs (IDR)", main= "SMA N=4 Data Kurs")
+points(data_kurs.ts)
+lines(data.gab[,2], col="green", lwd=2)
+lines(data.gab[,3], col="red", lwd=2)
+legend("topleft", c("data aktual","data pemulusan","data peramalan"),
+       lty=8, col=c("black","green","red"), cex=0.5)
+```
+
+## Akurasi Data Latih
+```{r}
+error_train.sma = train.ts - data.ramal[1:length(train.ts)]
+
+SSE_train.sma = sum(error_train.sma[5:length(train.ts)]^2)
+MSE_train.sma = mean(error_train.sma[5:length(train.ts)]^2)
+MAPE_train.sma = mean(abs((error_train.sma[5:length(train.ts)]/train.ts[5:length(train.ts)])*100))
+
+akurasi_train.sma <- matrix(c(SSE_train.sma, MSE_train.sma, MAPE_train.sma))
+row.names(akurasi_train.sma) <- c("SSE", "MSE", "MAPE")
+colnames(akurasi_train.sma) <- c("Akurasi m = 4")
+akurasi_train.sma
+```
+## Akurasi Data Uji
+```{r}
+error_test.sma = test.ts - data.gab[(n_train+1):n, 3]
+
+SSE_test.sma = sum(error_test.sma^2)
+MSE_test.sma = mean(error_test.sma^2)
+MAPE_test.sma = mean(abs((error_test.sma/test.ts*100)))
+
+akurasi_test.sma <- matrix(c(SSE_test.sma, MSE_test.sma, MAPE_test.sma))
+row.names(akurasi_test.sma) <- c("SSE", "MSE", "MAPE")
+colnames(akurasi_test.sma) <- c("Akurasi m = 4")
+akurasi_test.sma
+```
+## DMA
+```{r}
+dma <- SMA(data.sma, n = 4)
+At <- 2*data.sma - dma
+Bt <- 2/(4-1)*(data.sma - dma)
+data.dma <- At + Bt
+data.ramal2 <- c(NA, data.dma)
+
+t = 1:n_test
+f = c()
+
+for (i in t) {
+  f[i] = At[length(At)] + Bt[length(Bt)]*(i)
+}
+
+data.gab2 <- cbind(aktual = c(data_kurs.ts),
+                   pemulusan1 = c(data.sma, rep(NA, n_test)),
+                   pemulusan2 = c(dma, rep(NA, n_test)),
+                   At = c(At, rep(NA, n_test)),
+                   Bt = c(Bt, rep(NA, n_test)),
+                   ramalan = c(data.ramal2, f[-1]))
+data.gab2
+```
+
+```{r}
+ts.plot(data_kurs.ts, xlab="Time Period", ylab="Kurs (IDR)", main= "DMA N=4 Data Kurs")
+points(data_kurs.ts)
+lines(data.gab2[,3], col="green", lwd=2)
+lines(data.gab2[,6], col="red", lwd=2)
+legend("topleft", c("data aktual","data pemulusan","data peramalan"),
+       lty=8, col=c("black","green","red"), cex=0.8)
+```
+
+## Akurasi Data Latih
+```{r}
+error_train.dma = train.ts - data.ramal2[1:length(train.ts)]
+
+SSE_train.dma = sum(error_train.dma[8:length(train.ts)]^2)
+MSE_train.dma = mean(error_train.dma[8:length(train.ts)]^2)
+MAPE_train.dma = mean(abs((error_train.dma[8:length(train.ts)]/train.ts[8:length(train.ts)])*100))
+
+akurasi_train.dma <- matrix(c(SSE_train.dma, MSE_train.dma, MAPE_train.dma))
+row.names(akurasi_train.dma) <- c("SSE", "MSE", "MAPE")
+colnames(akurasi_train.dma) <- c("Akurasi m = 4")
+akurasi_train.dma
+```
+
+## Akurasi Data Uji
+```{r}
+error_test.dma = test.ts - data.gab2[(n_train+1):n, 6]
+
+SSE_test.dma = sum(error_test.dma^2)
+MSE_test.dma = mean(error_test.dma^2)
+MAPE_test.dma = mean(abs((error_test.dma/test.ts*100)))
+
+akurasi_test.dma <- matrix(c(SSE_test.dma, MSE_test.dma, MAPE_test.dma))
+row.names(akurasi_test.dma) <- c("SSE", "MSE", "MAPE")
+colnames(akurasi_test.dma) <- c("Akurasi m = 4")
+akurasi_test.dma
+```
+
+# Exponential Smoothing
+```{r}
+h_forecast <- n_test  # horizon ramalan disesuaikan agar mencakup seluruh data uji
+```
+
+## SES
+```{r}
+#Cara 1 (fungsi ses)
+ses.1 <- ses(train.ts, h = h_forecast, alpha = 0.2)
+plot(ses.1)
+ses.1
+
+ses.2 <- ses(train.ts, h = h_forecast, alpha = 0.7)
+plot(ses.2)
+ses.2
+```
+```{r}
+autoplot(ses.1) +
+  autolayer(fitted(ses.1), series="Fitted") +
+  ylab("Kurs (IDR)") + xlab("Periode")
+```
+
+```{r}
+#Cara 2 (fungsi HoltWinters)
+ses1 <- HoltWinters(train.ts, gamma = FALSE, beta = FALSE, alpha = 0.2)
+plot(ses1)
+ramalan1 <- forecast(ses1, h = h_forecast)
+ramalan1
+
+ses2 <- HoltWinters(train.ts, gamma = FALSE, beta = FALSE, alpha = 0.7)
+plot(ses2)
+ramalan2 <- forecast(ses2, h = h_forecast)
+ramalan2
+```
+
+```{r}
+#SES optimum
+ses.opt <- ses(train.ts, h = h_forecast, alpha = NULL)
+plot(ses.opt)
+ses.opt
+
+HWopt <- HoltWinters(train.ts, gamma = FALSE, beta = FALSE, alpha = NULL)
+HWopt
+plot(HWopt)
+
+ramalanopt <- forecast(HWopt, h = h_forecast)
+ramalanopt
+```
+
+## Akurasi Data Latih
+```{r}
+# SES dengan alpha = 0.2
+SSE1 <- ses1$SSE
+MSE1 <- ses1$SSE/length(train.ts)
+RMSE1 <- sqrt(MSE1)
+akurasi1 <- matrix(c(SSE1,MSE1,RMSE1))
+row.names(akurasi1) <- c("SSE", "MSE", "RMSE")
+colnames(akurasi1) <- c("Akurasi lamda=0.2")
+akurasi1
+
+# SES dengan alpha = 0.7
+SSE2 <- ses2$SSE
+MSE2 <- ses2$SSE/length(train.ts)
+RMSE2 <- sqrt(MSE2)
+akurasi2 <- matrix(c(SSE2,MSE2,RMSE2))
+row.names(akurasi2) <- c("SSE", "MSE", "RMSE")
+colnames(akurasi2) <- c("Akurasi lamda=0.7")
+akurasi2
+```
+
+```{r}
+#Cara Manual
+# Alpha = 0.2
+sisaan1 <- ramalan1$residuals
+resid1 <- training$Kurs - ramalan1$fitted
+
+SSE.1 = sum(sisaan1[2:length(train.ts)]^2)
+MSE.1 = SSE.1/length(train.ts)
+MAPE.1 = sum(abs(sisaan1[2:length(train.ts)]/train.ts[2:length(train.ts)])*100)/length(train.ts)
+
+akurasi.1 <- matrix(c(SSE.1,MSE.1,MAPE.1))
+row.names(akurasi.1) <- c("SSE", "MSE", "MAPE")
+colnames(akurasi.1) <- c("Akurasi lamda=0.2")
+akurasi.1
+
+# Alpha = 0.7
+sisaan2 <- ramalan2$residuals
+resid2 <- training$Kurs - ramalan2$fitted
+
+SSE.2 = sum(sisaan2[2:length(train.ts)]^2)
+MSE.2 = SSE.2/length(train.ts)
+MAPE.2 = sum(abs(sisaan2[2:length(train.ts)]/train.ts[2:length(train.ts)])*100)/length(train.ts)
+
+akurasi.2 <- matrix(c(SSE.2,MSE.2,MAPE.2))
+row.names(akurasi.2) <- c("SSE", "MSE", "MAPE")
+colnames(akurasi.2) <- c("Akurasi lamda=0.7")
+akurasi.2
+```
+
+## Akurasi Data Uji
+```{r}
+n_test_ses <- nrow(testing)
+
+e1   <- as.numeric(ramalan1$mean)[1:n_test_ses] - as.numeric(testing$Kurs)
+e2   <- as.numeric(ramalan2$mean)[1:n_test_ses] - as.numeric(testing$Kurs)
+eopt <- as.numeric(ramalanopt$mean)[1:n_test_ses] - as.numeric(testing$Kurs)
+
+SSEtesting1  <- sum(e1^2,  na.rm = TRUE)
+MSEtesting1  <- mean(e1^2, na.rm = TRUE)
+RMSEtesting1 <- sqrt(MSEtesting1)
+
+SSEtesting2  <- sum(e2^2,  na.rm = TRUE)
+MSEtesting2  <- mean(e2^2, na.rm = TRUE)
+RMSEtesting2 <- sqrt(MSEtesting2)
+
+SSEtestingopt  <- sum(eopt^2,  na.rm = TRUE)
+MSEtestingopt  <- mean(eopt^2, na.rm = TRUE)
+RMSEtestingopt <- sqrt(MSEtestingopt)
+
+akurasitesting_SSE <- matrix(c(SSEtesting1, SSEtesting2, SSEtestingopt),
+                             nrow = 3, dimnames = list(c("SSE1","SSE2","SSEopt"), "Nilai"))
+akurasitesting_MSE <- matrix(c(MSEtesting1, MSEtesting2, MSEtestingopt),
+                             nrow = 3, dimnames = list(c("MSE1","MSE2","MSEopt"), "Nilai"))
+akurasitesting_RMSE <- matrix(c(RMSEtesting1, RMSEtesting2, RMSEtestingopt),
+                              nrow = 3, dimnames = list(c("RMSE1","RMSE2","RMSEopt"), "Nilai"))
+
+akurasitesting_SSE
+akurasitesting_MSE
+akurasitesting_RMSE
+```
+
+```{r}
+accuracy(ramalan1, testing$Kurs)
+accuracy(ramalan2, testing$Kurs)
+accuracy(ramalanopt, testing$Kurs)
+```
+
+## DES
+```{r}
+#Lamda=0.2 dan beta=0.2
+des.1 <- HoltWinters(train.ts, gamma = FALSE, beta = 0.2, alpha = 0.2)
+plot(des.1)
+ramalandes1 <- forecast(des.1, h = h_forecast)
+ramalandes1
+
+#Lamda=0.6 dan beta=0.3
+des.2 <- HoltWinters(train.ts, gamma = FALSE, beta = 0.3, alpha = 0.6)
+plot(des.2)
+ramalandes2 <- forecast(des.2, h = h_forecast)
+ramalandes2
+```
+
+```{r}
+plot(data_kurs.ts)
+lines(des.1$fitted[,1], lty=2, col="blue")
+lines(ramalandes1$mean, col="red")
+```
+
+```{r}
+#Lamda dan beta optimum
+des.opt <- HoltWinters(train.ts, gamma = FALSE)
+des.opt
+plot(des.opt)
+ramalandesopt <- forecast(des.opt, h = h_forecast)
+ramalandesopt
+```
+
+## Akurasi Data Latih
+```{r}
+ssedes.train1 <- des.1$SSE
+msedes.train1 <- ssedes.train1/length(train.ts)
+sisaandes1 <- ramalandes1$residuals
+
+mapedes.train1 <- sum(abs(sisaandes1[3:length(train.ts)]/train.ts[3:length(train.ts)])*100)/length(train.ts)
+
+akurasides.1 <- matrix(c(ssedes.train1,msedes.train1,mapedes.train1))
+row.names(akurasides.1) <- c("SSE", "MSE", "MAPE")
+colnames(akurasides.1) <- c("Akurasi lamda=0.2 dan beta=0.2")
+akurasides.1
+
+ssedes.train2 <- des.2$SSE
+msedes.train2 <- ssedes.train2/length(train.ts)
+sisaandes2 <- ramalandes2$residuals
+
+mapedes.train2 <- sum(abs(sisaandes2[3:length(train.ts)]/train.ts[3:length(train.ts)])*100)/length(train.ts)
+
+akurasides.2 <- matrix(c(ssedes.train2,msedes.train2,mapedes.train2))
+row.names(akurasides.2) <- c("SSE", "MSE", "MAPE")
+colnames(akurasides.2) <- c("Akurasi lamda=0.6 dan beta=0.3")
+akurasides.2
+```
+
+## Akurasi Data Uji
+```{r}
+selisihdes1 <- ramalandes1$mean - testing$Kurs
+SSEtestingdes1 <- sum(selisihdes1^2)
+MSEtestingdes1 <- SSEtestingdes1/length(testing$Kurs)
+MAPEtestingdes1 <- sum(abs(selisihdes1/testing$Kurs)*100)/length(testing$Kurs)
+
+selisihdes2 <- ramalandes2$mean - testing$Kurs
+SSEtestingdes2 <- sum(selisihdes2^2)
+MSEtestingdes2 <- SSEtestingdes2/length(testing$Kurs)
+MAPEtestingdes2 <- sum(abs(selisihdes2/testing$Kurs)*100)/length(testing$Kurs)
+
+selisihdesopt <- ramalandesopt$mean - testing$Kurs
+SSEtestingdesopt <- sum(selisihdesopt^2)
+MSEtestingdesopt <- SSEtestingdesopt/length(testing$Kurs)
+MAPEtestingdesopt <- sum(abs(selisihdesopt/testing$Kurs)*100)/length(testing$Kurs)
+
+akurasitestingdes <-
+  matrix(c(SSEtestingdes1,MSEtestingdes1,MAPEtestingdes1,SSEtestingdes2,MSEtestingdes2,
+           MAPEtestingdes2,SSEtestingdesopt,MSEtestingdesopt,MAPEtestingdesopt),
+         nrow=3,ncol=3)
+row.names(akurasitestingdes) <- c("SSE", "MSE", "MAPE")
+colnames(akurasitestingdes) <- c("des ske1","des ske2","des opt")
+akurasitestingdes
+```
+
+# Perbandingan SES dan DES
+```{r}
+MSEfull <-
+  matrix(c(MSEtesting1,MSEtesting2,MSEtestingopt,MSEtestingdes1,MSEtestingdes2,
+           MSEtestingdesopt), nrow=3, ncol=2)
+row.names(MSEfull) <- c("ske 1", "ske 2", "ske opt")
+colnames(MSEfull) <- c("ses","des")
+MSEfull
+```
+
+## Holt Winters
+
+```{r}
+training.ts <- ts(training$Kurs, frequency = 7)
+testing.ts  <- ts(testing$Kurs, frequency = 7)
+```
+
+```{r}
+plot(data_kurs.ts, col="red", main="Plot semua data")
+points(data_kurs.ts)
+
+plot(training.ts, col="blue", main="Plot data latih")
+points(training.ts)
+
+plot(testing.ts, col="green", main="Plot data uji")
+points(testing.ts)
+```
+
 
