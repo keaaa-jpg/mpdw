@@ -1,1 +1,294 @@
+---
+title: "Pertemuan 4 - Pembangkitan ARMA"
+author: "Keira Gisella"
+output:
+  html_document: 
+    theme: lumen
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    code_folding: hide
+  pdf_document: default
+  word_document: default
+---
+
+# Library
+```{r}
+library(TSA)
+```
+# PROSES MA(2): theta1 = 0.4, theta2 = 0.6, n = 300
+
+```{r}
+set.seed(1234)
+n <- 300
+wn <- rnorm(n)
+
+theta1 <- 0.4
+theta2 <- 0.6
+```
+
+## Pembangkitan manual
+```{r}
+ma2 <- wn[1:2]
+for(i in 3:n){
+  ma2[i] <- wn[i] + theta1*wn[i-1] + theta2*wn[i-2]
+}
+ma2
+```
+
+## Pembangkitan dengan arima.sim
+```{r}
+set.seed(1234)
+ma2.sim <- arima.sim(list(order=c(0,0,2), ma=c(theta1,theta2)), n=n)
+ma2.sim
+```
+
+## Plot time series
+```{r}
+par(mfrow = c(1, 2))
+ts.plot(ma2, main = "MA(2) Manual")
+ts.plot(ma2.sim, main = "MA(2) arima.sim")
+par(mfrow = c(1, 1))
+```
+**Interpretasi: ** Berdasarkan plot time series, terlihat bahwa data MA(2) hasil pembangkitan manual maupun `arima.sim` berfluktuasi di sekitar rataan konstan (mendekati 0) tanpa tren, sehingga data tersebut stasioner dalam rataan. Pola kedua plot juga identik karena menggunakan seed dan koefisien yang sama.
+
+## Plot ACF
+```{r}
+par(mfrow = c(1, 2))
+acf(ma2, main = "ACF Manual")
+acf(ma2.sim, main = "ACF arima.sim")
+par(mfrow = c(1, 1))
+```
+**Interpretasi: **Berdasarkan plot ACF tersebut, terlihat bahwa ACF signifikan pada lag 1 dan 2, kemudian *cuts off* (berada dalam batas signifikansi) setelah lag 2. Pola ini sesuai dengan teori bahwa proses MA(2) memiliki ACF yang terputus setelah lag ke-q (q=2).
+
+## Plot PACF
+```{r}
+par(mfrow = c(1, 2))
+pacf(ma2, main = "PACF Manual")
+pacf(ma2.sim, main = "PACF arima.sim")
+par(mfrow = c(1, 1))
+```
+**Interpretasi: **Berdasarkan plot PACF tersebut, terlihat bahwa PACF cenderung *tails off* (meluruh secara bergelombang) dan tidak terputus tegas di lag tertentu, sebagaimana ciri khas proses MA.
+
+## Plot EACF
+```{r}
+TSA::eacf(ma2)
+TSA::eacf(ma2.sim)
+```
+**Interpretasi: **Berdasarkan pola segitiga nol pada plot EACF, segitiga nol mulai terbentuk pada ordo AR(0) dan MA(2), yang sesuai dengan model MA(2) yang dibangkitkan.
+
+## Scatterplot Yt vs Yt-1
+```{r}
+yt   <- ma2[-1]
+yt_1 <- ma2[-n]
+plot(y = yt, x = yt_1, main = "Yt vs Yt-1 (MA2)")
+cor(yt, yt_1)
+```
+**Interpretasi: **Berdasarkan scatterplot tersebut, terlihat bahwa terdapat hubungan positif antara $Y_t$ dengan $Y_{t-1}$ $(cor = 0.5275)$. Nilai ini cukup mendekati autokorelasi teoritis $\rho_1 = 0.4210$.
+
+## Scatterplot Yt vs Yt-2
+```{r}
+yt2  <- ma2[-c(1,2)]
+yt_2 <- ma2[-c(n-1, n)]
+plot(y = yt2, x = yt_2, main = "Yt vs Yt-2 (MA2)")
+cor(yt2, yt_2)
+```
+**Interpretasi: **Berdasarkan scatterplot tersebut, masih terlihat hubungan positif antara $Y_t$ dengan $Y_{t-2}$ meski lebih menyebar $(cor = 0.4339)$, mendekati nilai teoritis $\rho_2 = 0.3947.$
+
+## Scatterplot Yt vs Yt-3
+```{r}
+yt3  <- ma2[-c(1,2,3)]
+yt_3 <- ma2[-c(n-2, n-1, n)]
+plot(y = yt3, x = yt_3, main = "Yt vs Yt-3 (MA2)")
+cor(yt3, yt_3)
+```
+**Interpretasi: **Berdasarkan scatterplot tersebut, terlihat bahwa cenderung tidak ada hubungan antara $Y_t$ dengan $Y_{t-3}$ $(cor = 0.0856)$, mendekati nilai teoritis $\rho_3 = 0$. Hasil ini sesuai teori bahwa ACF proses MA(2) terputus (menjadi nol) setelah lag ke-2.
+
+## Autokorelasi teoritis
+```{r}
+ARMAacf(ma = c(theta1, theta2), lag.max = 3)
+```
+# PROSES AR(2): phi1 = 0.5, phi2 = 0.2, n = 300
+```{r}
+set.seed(1234)
+n <- 300
+wn <- rnorm(n)
+
+phi1 <- 0.5
+phi2 <- 0.2
+```
+
+## Pembangkitan manual
+```{r}
+ar2 <- wn[1:2]
+for(i in 3:n){
+  ar2[i] <- phi1*ar2[i-1] + phi2*ar2[i-2] + wn[i]
+}
+ar2
+```
+## Pembangkitan dengan arima.sim
+```{r}
+set.seed(1234)
+ar2.sim <- arima.sim(list(order=c(2,0,0), ar=c(phi1,phi2)), n=n)
+ar2.sim
+```
+## Plot time series
+```{r}
+par(mfrow = c(1, 2))
+ts.plot(ar2, main = "AR(2) Manual")
+ts.plot(ar2.sim, main = "AR(2) arima.sim")
+par(mfrow = c(1, 1))
+```
+**Interpretasi: **Berdasarkan plot time series, terlihat bahwa data AR(2) hasil pembangkitan manual maupun `arima.sim` berfluktuasi di sekitar rataan konstan tanpa tren naik/turun, sehingga data tersebut stasioner dalam rataan.
+
+## Plot ACF
+```{r}
+par(mfrow = c(1, 2))
+acf(ar2, main = "ACF Manual")
+acf(ar2.sim, main = "ACF arima.sim")
+par(mfrow = c(1, 1))
+```
+**Interpretasi: **Berdasarkan plot ACF tersebut, terlihat bahwa ACF meluruh *(tails off)* secara eksponensial dan tidak terputus tegas pada lag tertentu, sebagaimana ciri khas proses AR.
+
+## Plot PACF
+```{r}
+par(mfrow = c(1, 2))
+pacf(ar2, main = "PACF Manual")
+pacf(ar2.sim, main = "PACF arima.sim")
+par(mfrow = c(1, 1))
+```
+**Interpretasi: **Berdasarkan plot PACF tersebut, terlihat bahwa PACF signifikan pada lag 1 kemudian *cuts off* (berada dalam batas signifikansi) setelah lag 2, sesuai dengan teori bahwa PACF proses AR(p) terputus setelah lag ke-p (p=2).
+
+## Plot EACF
+```{r}
+TSA::eacf(ar2)
+TSA::eacf(ar2.sim)
+```
+**Interpretasi: **Berdasarkan pola segitiga nol pada plot EACF, segitiga nol mulai terbentuk pada ordo AR(2) dan MA(0), yang sesuai dengan model AR(2) yang dibangkitkan.
+
+## Scatterplot Yt vs Yt-1
+```{r}
+yt   <- ar2[-1]
+yt_1 <- ar2[-n]
+plot(y = yt, x = yt_1, main = "Yt vs Yt-1 (AR2)")
+cor(yt, yt_1)
+```
+**Interpretasi: **Berdasarkan scatterplot tersebut, terlihat bahwa terdapat hubungan positif yang cukup kuat antara $Y_t$ dengan $Y_{t-1}$ $(cor = 0.7166)$, mendekati autokorelasi teoritis $\rho_1 = 0.6250.$
+
+## Scatterplot Yt vs Yt-2
+```{r}
+yt2  <- ar2[-c(1,2)]
+yt_2 <- ar2[-c(n-1, n)]
+plot(y = yt2, x = yt_2, main = "Yt vs Yt-2 (AR2)")
+cor(yt2, yt_2)
+```
+**Interpretasi: **Berdasarkan scatterplot tersebut, masih terlihat hubungan positif antara $Y_t$ dengan $Y_{t-2}$ $(cor = 0.5856)$, mendekati nilai teoritis $\rho_2 = 0.5125$.
+
+## Scatterplot Yt vs Yt-3
+```{r}
+yt3  <- ar2[-c(1,2,3)]
+yt_3 <- ar2[-c(n-2, n-1, n)]
+plot(y = yt3, x = yt_3, main = "Yt vs Yt-3 (AR2)")
+cor(yt3, yt_3)
+```
+**Interpretasi: **Berdasarkan scatterplot tersebut, hubungan positif antara $Y_t$ dengan $Y_{t-3}$ masih terlihat meski melemah $(cor = 0.4610)$, mendekati nilai teoritis $\rho_3 = 0.3812$. Pola ini sesuai teori bahwa ACF proses AR meluruh secara perlahan (tidak langsung nol) seiring bertambahnya lag.
+
+## Autokorelasi teoritis
+```{r}
+ARMAacf(ar = c(phi1, phi2), lag.max = 3)
+```
+# PROSES ARMA(2,2): theta1=0.4, theta2=0.6, phi1=0.5, phi2=0.2, n=300
+```{r}
+set.seed(1234)
+n <- 300
+wn <- rnorm(n)
+
+phi1 <- 0.5
+phi2 <- 0.2
+theta1 <- 0.4
+theta2 <- 0.6
+```
+
+## Pembangkitan manual
+```{r}
+arma22 <- wn[1:2]
+for(i in 3:n){
+  arma22[i] <- phi1*arma22[i-1] + phi2*arma22[i-2] +
+               wn[i] + theta1*wn[i-1] + theta2*wn[i-2]
+}
+arma22
+```
+
+## Pembangkitan dengan arima.sim
+```{r}
+set.seed(1234)
+arma22.sim <- arima.sim(list(order=c(2,0,2), ar=c(phi1,phi2), ma=c(theta1,theta2)), n=n)
+arma22.sim
+```
+
+## Plot time series
+```{r}
+par(mfrow = c(1, 2))
+ts.plot(arma22, main = "ARMA(2,2) Manual")
+ts.plot(arma22.sim, main = "ARMA(2,2) arima.sim")
+par(mfrow = c(1, 1))
+```
+**Interpretasi: **Berdasarkan plot time series, terlihat bahwa data ARMA(2,2) hasil pembangkitan manual maupun `arima.sim` berfluktuasi di sekitar rataan konstan tanpa tren, sehingga data tersebut stasioner dalam rataan.
+
+## Plot ACF
+```{r}
+par(mfrow = c(1, 2))
+acf(arma22, main = "ACF Manual")
+acf(arma22.sim, main = "ACF arima.sim")
+par(mfrow = c(1, 1))
+```
+**Interpretasi: **Berdasarkan plot ACF tersebut, terlihat bahwa ACF meluruh *(tails off)* secara eksponensial dan tidak terputus tegas pada lag tertentu, sebagaimana ciri khas proses campuran ARMA.
+
+## Plot PACF
+```{r}
+par(mfrow = c(1, 2))
+pacf(arma22, main = "PACF Manual")
+pacf(arma22.sim, main = "PACF arima.sim")
+par(mfrow = c(1, 1))
+```
+**Interpretasi: **Berdasarkan plot PACF tersebut, terlihat bahwa PACF juga cenderung *tails off* dengan pola bergelombang, tidak terputus tegas pada lag tertentu, sebagaimana ciri khas proses campuran ARMA.
+
+## Plot EACF
+```{r}
+TSA::eacf(arma22)
+TSA::eacf(arma22.sim)
+```
+**Interpretasi: **Berdasarkan pola segitiga nol pada plot EACF, segitiga nol mulai terbentuk pada ordo AR(2) dan MA(2), yang sesuai dengan model ARMA(2,2) yang dibangkitkan.
+
+## Scatterplot Yt vs Yt-1
+```{r}
+yt   <- arma22[-1]
+yt_1 <- arma22[-n]
+plot(y = yt, x = yt_1, main = "Yt vs Yt-1 (ARMA22)")
+cor(yt, yt_1)
+```
+**Interpretasi: **Berdasarkan scatterplot tersebut, terlihat bahwa terdapat hubungan positif yang kuat antara $Y_t$ dengan $Y_{t-1}$ $(cor = 0.8947)$, mendekati autokorelasi teoritis $\rho_1 = 0.8592$.
+
+## Scatterplot Yt vs Yt-2
+```{r}
+yt2  <- arma22[-c(1,2)]
+yt_2 <- arma22[-c(n-1, n)]
+plot(y = yt2, x = yt_2, main = "Yt vs Yt-2 (ARMA22)")
+cor(yt2, yt_2)
+```
+**Interpretasi: **Berdasarkan scatterplot tersebut, hubungan positif masih terlihat kuat antara $Y_t$ dengan $Y_{t-2}$ $(cor = 0.7882)$, mendekati nilai teoritis $\rho_2 = 0.7492$.
+
+## Scatterplot Yt vs Yt-3
+```{r}
+yt3  <- arma22[-c(1,2,3)]
+yt_3 <- arma22[-c(n-2, n-1, n)]
+plot(y = yt3, x = yt_3, main = "Yt vs Yt-3 (ARMA22)")
+cor(yt3, yt_3)
+```
+**Interpolasi: **Berdasarkan scatterplot tersebut, hubungan positif antara $Y_t$ dengan $Y_{t-3}$ masih terlihat meski mulai melemah $(cor = 0.6177)$, mendekati nilai teoritis $\rho_3 = 0.5464$. Pola ini sesuai teori bahwa ACF proses ARMA meluruh secara perlahan mengikuti komponen AR-nya, sama seperti pada proses AR(2) sebelumnya.
+
+## Autokorelasi teoritis
+```{r}
+ARMAacf(ar = c(phi1, phi2), ma = c(theta1, theta2), lag.max = 3)
+```
 
