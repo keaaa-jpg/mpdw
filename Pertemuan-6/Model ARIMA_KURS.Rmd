@@ -1,1 +1,673 @@
+---
+title: "Pemodelan ARIMA - Data Kurs JISDOR USD/IDR"
+author: "Keira"
+date: "`r Sys.Date()`"
+lang: id
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+    toc_depth: 3
+    number_sections: true
+    theme: flatly
+    highlight: tango
+    code_folding: hide
+    code_download: true
+    self_contained: true
+    fig_caption: true
+---
+
+<style>
+/* Teks dan lebar halaman */
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.8;
+  color: #29465b;
+  background: #ffffff;
+}
+.main-container {
+  max-width: 1200px !important;
+}
+p { margin-bottom: 14px; }
+
+/* Kartu judul */
+#header {
+  background: linear-gradient(110deg, #355f70 0%, #657087 52%, #c45689 100%);
+  padding: 42px 34px 32px;
+  margin: 20px 0 34px;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(35, 58, 76, 0.14);
+}
+#header .title {
+  color: white;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 18px 0 0;
+  padding-bottom: 10px;
+  border-bottom: 3px solid rgba(255, 255, 255, 0.65);
+}
+#header .subtitle {
+  color: white;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 5px 0 12px;
+}
+#header .author,
+#header .date {
+  color: white;
+  font-size: 14px;
+  font-weight: 400;
+  margin: 6px 0;
+}
+
+/* Judul bagian */
+h1, h2, h3, h4 {
+  color: #173e59;
+  font-weight: 600;
+  line-height: 1.35;
+}
+h1:not(.title) {
+  font-size: 32px;
+  margin-top: 38px;
+  padding-bottom: 9px;
+  border-bottom: 3px solid #efa2c2;
+}
+h2:not(.subtitle) { font-size: 26px; margin-top: 30px; }
+h3 { font-size: 21px; margin-top: 24px; }
+h4 { font-size: 17px; }
+
+/* Daftar isi */
+#TOC {
+  font-size: 13px;
+  line-height: 1.55;
+  border: 1px solid #efb6cf;
+  border-radius: 7px;
+  background: white;
+}
+.tocify {
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.tocify-item { padding-top: 3px; padding-bottom: 3px; }
+.tocify-subheader { background: #fff7fb; }
+#TOC .tocify-item.active,
+#TOC .tocify-item.active:hover,
+#TOC .list-group-item.active {
+  color: white;
+  background: #bd4c80;
+  border-color: #bd4c80;
+}
+.toc-section-number { margin-right: 0.35em; }
+
+/* Tautan dan kode */
+a { color: #a33768; }
+a:hover { color: #762449; }
+pre {
+  background: #f7f9fb;
+  border: 1px solid #dce5ec;
+  border-radius: 8px;
+  padding: 16px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+pre code { white-space: pre; }
+p code, li code, td code {
+  color: #91406a;
+  background: #f9edf3;
+  border-radius: 4px;
+}
+.code-folding-btn {
+  margin-bottom: 6px;
+  border-radius: 4px;
+}
+#header .btn {
+  color: #173e59;
+  background: #ffffff;
+  border-color: #ffffff;
+}
+
+/* Tabel */
+table {
+  width: 100%;
+  font-size: 14px;
+  margin: 18px 0 24px;
+}
+table th {
+  background: #f5e5ed;
+  color: #173e59;
+}
+table th, table td {
+  padding: 10px 12px !important;
+  border-bottom: 1px solid #e6ebef;
+}
+table tbody tr:nth-child(even) { background: #fafbfd; }
+caption, .caption {
+  color: #526779;
+  font-size: 13px;
+}
+
+/* Kotak penjelasan */
+blockquote {
+  background: #f2f7fa;
+  border-left: 5px solid #54889b;
+  padding: 16px 20px;
+  font-size: 15px;
+}
+.callout {
+  background: #fdf0f6;
+  border-left: 5px solid #bd4c80;
+  border-radius: 6px;
+  padding: 18px 22px;
+  margin: 22px 0;
+}
+.callout strong { color: #92345f; }
+.pause {
+  background: #fff8e9;
+  border-left: 5px solid #d99a28;
+  padding: 16px 20px;
+  margin: 22px 0;
+}
+details {
+  border: 1px solid #e6c6d6;
+  border-radius: 7px;
+  padding: 12px 18px;
+  margin: 20px 0;
+}
+summary {
+  color: #92345f;
+  font-weight: 600;
+  cursor: pointer;
+}
+img { max-width: 100%; height: auto; }
+
+/* Tampilan layar kecil */
+@media (max-width: 767px) {
+  #header { padding: 26px 20px; }
+  #header .title { font-size: 28px; }
+  #header .subtitle { font-size: 19px; }
+  h1:not(.title) { font-size: 27px; }
+  .tocify { max-height: 300px; }
+}
+
+/* Tampilan cetak */
+@media print {
+  #TOC, .code-folding-btn, .code-tools { display: none; }
+  #header {
+    background: white !important;
+    box-shadow: none;
+    border: 1px solid #cccccc;
+  }
+  #header .title, #header .subtitle,
+  #header .author, #header .date { color: #173e59; }
+  .main-container { max-width: 100% !important; }
+  pre { white-space: pre-wrap; }
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, message = FALSE, warning = TRUE, error = FALSE,
+  fig.width = 8.5, fig.height = 5.4, dpi = 140,
+  fig.align = "center", out.width = "100%", collapse = TRUE,
+  comment = "#>"
+)
+options(width = 90)
+```
+
+# Packages
+
+```{r}
+library(ggplot2)
+library(tseries)
+library(MASS)
+library(forecast)
+library(TSA)
+library(TTR)
+library(lmtest)
+library(rio)
+```
+
+# Impor Data
+
+Data: kurs JISDOR (USD/IDR) harian yang sudah dilengkapi (*forward fill*) menjadi deret kalender penuh, 26 Agustus 2024 -- 24 Agustus 2026 (729 observasi).
+
+```{r}
+data_kurs <- import("Kurs_JISDOR_Lengkap_ForwardFill.xlsx", sheet = "Kurs JISDOR Lengkap")
+names(data_kurs)[names(data_kurs) == "Kurs (IDR)"] <- "Kurs"
+data_kurs$Periode <- 1:nrow(data_kurs)
+head(data_kurs)
+```
+
+Data dibagi menjadi data latih dan data uji dengan proporsi 80:20.
+
+```{r}
+n <- nrow(data_kurs)
+n_train <- floor(0.8 * n)
+n_test  <- n - n_train
+
+training <- data_kurs[1:n_train, ]
+testing  <- data_kurs[(n_train+1):n, ]
+
+train.ts <- ts(training$Kurs)
+test.ts  <- ts(testing$Kurs)
+datakurs.ts <- ts(data_kurs$Kurs)
+
+c(n = n, n_train = n_train, n_test = n_test)
+```
+
+> **Interpretasi:** Dari 729 observasi, 583 data pertama menjadi data latih dan 146 data terakhir menjadi data uji.
+
+# Eksplorasi Data
+
+## Plot Data Penuh
+
+```{r}
+plot.ts(datakurs.ts, lty = 1, xlab = "Waktu", ylab = "Kurs (IDR)", main = "Plot Data Kurs")
+```
+
+## Plot Data Latih
+
+```{r}
+plot.ts(train.ts, lty = 1, xlab = "Waktu", ylab = "Kurs (IDR)", main = "Plot Kurs Train")
+```
+
+## Plot Data Uji
+
+```{r}
+plot.ts(test.ts, lty = 1, xlab = "Waktu", ylab = "Kurs (IDR)", main = "Plot Kurs Test")
+```
+
+> **Interpretasi:** Kurs USD/IDR bergerak pada rentang sekitar Rp15.092 -- Rp16.999 dengan pola naik-turun yang tidak berputar di sekitar satu nilai tengah tetap (ciri *random walk* pada data finansial). Data uji berada di level yang lebih tinggi (mulai Rp17.002) daripada akhir data latih (Rp16.999) dan terus naik hingga sekitar Rp18.171. Secara visual data **belum stasioner dalam rataan**; hal ini dikonfirmasi lewat ACF dan uji ADF berikut.
+
+# Uji Stasioneritas Data
+
+## Plot ACF
+
+```{r}
+acf(train.ts)
+```
+
+> **Interpretasi:** ACF sangat tinggi (0,989 di lag 1) dan meluruh sangat lambat (*tails off*), semua lag awal jauh di luar batas signifikansi. Ini indikasi kuat data **tidak stasioner dalam rataan**.
+
+## Uji ADF
+
+```{r}
+tseries::adf.test(train.ts)
+```
+
+$H_0$: data tidak stasioner dalam rataan; $H_1$: data stasioner dalam rataan.
+
+> **Interpretasi:** Statistik Dickey-Fuller = -2,318 dengan *p-value* = 0,4438 (> 0,05), sehingga **gagal tolak $H_0$**: data tidak stasioner dalam rataan. Konsisten dengan plot deret waktu dan ACF.
+
+## Plot Box-Cox
+
+```{r}
+index <- seq(1:length(train.ts))
+
+# Box-Cox
+bc <- boxcox(train.ts ~ index, lambda = seq(-2, 3, by = 0.1))
+```
+
+```{r}
+# Nilai lambda optimum
+lambda_opt <- bc$x[which.max(bc$y)]
+lambda_opt
+```
+
+```{r}
+# Selang kepercayaan 95% untuk lambda
+ci_lambda <- bc$x[bc$y > max(bc$y) - 0.5 * qchisq(0.95, df = 1)]
+
+# Batas bawah dan batas atas
+ci_lower <- min(ci_lambda)
+ci_upper <- max(ci_lambda)
+
+c(Batas_Bawah = ci_lower, Batas_Atas = ci_upper)
+```
+
+> **Interpretasi:** Lambda optimum = 3 dengan selang kepercayaan 95% [2,9 ; 3]. Selang tidak memuat 1, sehingga data level **tidak stasioner dalam ragam**. Namun lambda berada tepat di batas atas rentang pencarian; ini lazim pada data yang masih bertren kuat, karena Box-Cox kurang tepat dipakai pada data yang belum stasioner dalam rataan. Karena itu penanganan rataan (differencing) dilakukan lebih dulu, lalu ragam dicek ulang.
+
+# Penanganan Ketidakstasioneran Data
+
+## Differencing Pertama
+
+```{r}
+train.diff <- diff(train.ts, differences = 1)
+
+plot.ts(train.diff, lty = 1, xlab = "Waktu", ylab = "Data Difference 1 Kurs",
+        main = "Plot Difference Kurs")
+```
+
+> **Interpretasi:** Setelah differencing satu kali, data berfluktuasi di sekitar satu nilai tengah (rata-rata sekitar 2,8 rupiah per hari) tanpa tren, sehingga indikasi awal data sudah stasioner dalam rataan.
+
+## Plot ACF Setelah Differencing
+
+```{r}
+acf(train.diff)
+```
+
+> **Interpretasi:** ACF hampir seluruhnya berada dalam batas signifikansi. Hanya lag 13 yang sedikit keluar batas, yang wajar sebagai kebetulan statistik dari banyak lag yang diuji. Ketidakstasioneran rataan sudah teratasi.
+
+## Uji ADF Setelah Differencing
+
+```{r}
+tseries::adf.test(train.diff)
+```
+
+> **Interpretasi:** *p-value* = 0,01 (< 0,05), sehingga **tolak $H_0$**: data hasil differencing stasioner dalam rataan. Sejalan dengan plot dan ACF.
+
+## Cek Ulang Ragam Setelah Differencing
+
+Data hasil differencing memuat nilai negatif dan nol, padahal `boxcox()` hanya menerima data positif. Sesuai panduan, data digeser dengan konstanta agar nilai minimumnya menjadi 1.
+
+```{r}
+# 1. Sesuaikan panjang index karena differencing menghilangkan 1 observasi awal
+index_diff <- seq(1:length(train.diff))
+
+# 2. Cek nilai negatif/nol; jika ada, tambahkan konstanta agar minimum > 0
+min_val <- min(train.diff)
+
+if (min_val <= 0) {
+  c <- abs(min_val) + 1
+  train.diff_shifted <- train.diff + c
+} else {
+  train.diff_shifted <- train.diff
+}
+
+# 3. Plot Box-Cox pada data yang sudah di-shift
+bc_diff <- boxcox(train.diff_shifted ~ index_diff, lambda = seq(-2, 3, by = 0.1))
+```
+
+```{r}
+# 4. Nilai lambda optimum
+lambda_opt_diff <- bc_diff$x[which.max(bc_diff$y)]
+print(paste("Lambda optimum setelah diff:", lambda_opt_diff))
+```
+
+```{r}
+# 5. Selang kepercayaan 95% untuk lambda
+ci_lambda_diff <- bc_diff$x[bc_diff$y > max(bc_diff$y) - 0.5 * qchisq(0.95, df = 1)]
+
+ci_lower_diff <- min(ci_lambda_diff)
+ci_upper_diff <- max(ci_lambda_diff)
+
+c(Batas_Bawah = ci_lower_diff, Batas_Atas = ci_upper_diff)
+```
+
+> **Interpretasi:** Selang **memuat 1**, sehingga ragam data hasil differencing sudah stasioner dan **tidak perlu transformasi Box-Cox tambahan**.
+
+# Identifikasi Model
+
+## Plot ACF dan PACF
+
+```{r}
+acf(train.diff)
+```
+
+> **Interpretasi ACF:** Tidak ada lag awal yang konsisten signifikan (*cuts off* sejak lag 1), menunjukkan komponen MA berorde rendah (0 atau 1).
+
+```{r}
+pacf(train.diff)
+```
+
+> **Interpretasi PACF:** Juga *cuts off* sejak awal; lag 3 dan lag 4 hanya sedikit melewati batas, sehingga komponen AR berorde rendah (0 atau 1).
+
+## Plot EACF
+
+```{r}
+eacf(train.diff)
+```
+
+> **Interpretasi:** Karena ACF dan PACF sama-sama *cuts off* cepat, diajukan model tentatif orde rendah: **ARIMA(0,1,1)**, **ARIMA(1,1,0)**, **ARIMA(1,1,1)**, dan **ARIMA(2,1,2)**.
+
+# Pendugaan Parameter Model Tentatif
+
+Sesuai panduan, model dibangun pada data hasil differencing (`train.diff`) dengan orde d = 0, yang setara dengan ARIMA(p,1,q) pada data asli (dengan tambahan konstanta/*intercept* sebagai rata-rata selisih).
+
+## ARIMA(0,1,1)
+
+```{r}
+model1.da <- Arima(train.diff, order = c(0,0,1), method = "ML")
+summary(model1.da)
+```
+
+```{r}
+lmtest::coeftest(model1.da)
+```
+
+> **Interpretasi:** AIC ≈ 6060,4; ma1 ≈ 0,077 dengan *p-value* ≈ 0,088 (> 0,05) sehingga **tidak signifikan**.
+
+## ARIMA(1,1,0)
+
+```{r}
+model2.da <- Arima(train.diff, order = c(1,0,0), method = "ML")
+summary(model2.da)
+```
+
+```{r}
+lmtest::coeftest(model2.da)
+```
+
+> **Interpretasi:** AIC ≈ 6060,8; ar1 ≈ 0,067 dengan *p-value* ≈ 0,108 **tidak signifikan**.
+
+## ARIMA(1,1,1)
+
+```{r}
+model3.da <- Arima(train.diff, order = c(1,0,1), method = "ML")
+summary(model3.da)
+```
+
+```{r}
+lmtest::coeftest(model3.da)
+```
+
+> **Interpretasi:** AIC ≈ 6054,8 (terkecil). ar1 ≈ -0,683 dan ma1 ≈ 0,783, keduanya **signifikan** (*p-value* < 0,001). Intercept (≈ 2,79) tidak signifikan (*p-value* ≈ 0,145), artinya rata-rata perubahan harian tidak berbeda nyata dari nol, tetapi tetap dipertahankan di model.
+
+## ARIMA(2,1,2)
+
+```{r}
+model4.da <- Arima(train.diff, order = c(2,0,2), method = "ML")
+summary(model4.da)
+```
+
+```{r}
+lmtest::coeftest(model4.da)
+```
+
+> **Interpretasi:** AIC ≈ 6055,5. Model ini terlalu kompleks (*overparameterized*) dengan pasangan AR-MA yang hampir saling meniadakan; `coeftest` kemungkinan menghasilkan `NaN` (matriks informasi hampir singular), sehingga signifikansi parameter tidak dapat dipastikan. Model tidak dipilih.
+
+# Ringkasan AIC
+
+```{r}
+model_tentatif <- data.frame(
+  Model = c("ARIMA(0,1,1)", "ARIMA(1,1,0)", "ARIMA(1,1,1)", "ARIMA(2,1,2)"),
+  AIC = c(AIC(model1.da), AIC(model2.da), AIC(model3.da), AIC(model4.da)),
+  BIC = c(BIC(model1.da), BIC(model2.da), BIC(model3.da), BIC(model4.da))
+)
+model_tentatif[order(model_tentatif$AIC), ]
+```
+
+> **Interpretasi:** ARIMA(1,1,1) memiliki AIC terkecil (≈ 6054,8) dan merupakan satu-satunya model dengan parameter AR/MA yang seluruhnya signifikan, sehingga dipilih sebagai **model terbaik**. ARIMA(1,1,1) juga memiliki BIC terkecil (≈ 6072,3 dibanding ≈ 6073,5 untuk ARIMA(0,1,1)), meskipun selisihnya tipis.
+
+# Analisis Sisaan
+
+Sisaan model terbaik ARIMA(1,1,1) diperiksa asumsinya.
+
+## Eksplorasi Sisaan
+
+```{r}
+sisaan.da <- model3.da$residuals
+
+par(mfrow = c(2,2), mar = c(4,4,2,1), oma = c(0,0,2,0))
+
+# Q-Q Plot
+qqnorm(sisaan.da, main = "Normal Q-Q Plot")
+qqline(sisaan.da, col = "blue", lwd = 2)
+
+# Plot Sisaan vs Waktu
+plot(sisaan.da, type = "p", main = "Plot Sisaan vs Waktu", xlab = "Waktu", ylab = "Sisaan")
+
+# ACF
+acf(sisaan.da, main = "ACF Sisaan")
+
+# PACF
+pacf(sisaan.da, main = "PACF Sisaan")
+par(mfrow = c(1,1))
+```
+
+> **Interpretasi:** Titik Q-Q mengikuti garis di bagian tengah tetapi menyimpang di kedua ujung (ekor tebal, kurtosis berlebih), ciri umum data finansial. Plot sisaan vs waktu tersebar acak di sekitar nol, dan ACF/PACF sisaan tidak menunjukkan lonjakan berarti, sehingga sisaan secara visual saling bebas.
+
+## Uji Formal
+
+```{r}
+# 1) Sisaan menyebar normal
+ks.test(sisaan.da, "pnorm", mean(sisaan.da), sd(sisaan.da))
+```
+
+$H_0$: sisaan menyebar normal.
+
+> **Interpretasi:** *p-value* ≈ 1e-09 (< 0,05) → **tolak $H_0$**, sisaan tidak menyebar normal (ekor tebal/leptokurtik).
+
+```{r}
+# 2) Sisaan saling bebas / tidak ada autokorelasi
+Box.test(sisaan.da, type = "Ljung")
+```
+
+$H_0$: sisaan saling bebas.
+
+> **Interpretasi:** *p-value* ≈ 0,683 (> 0,05) → **gagal tolak $H_0$**, sisaan saling bebas. Asumsi **terpenuhi**.
+
+```{r}
+# 3) Sisaan homogen
+Box.test((sisaan.da)^2, type = "Ljung")
+```
+
+$H_0$: ragam sisaan homogen.
+
+> **Interpretasi:** *p-value* ≈ 0,387 (> 0,05) → **gagal tolak $H_0$**, ragam sisaan homogen (tidak ada efek ARCH pada lag ini). Asumsi **terpenuhi**.
+
+```{r}
+# 4) Nilai tengah sisaan sama dengan nol
+t.test(sisaan.da, mu = 0, conf.level = 0.95)
+```
+
+$H_0$: nilai tengah sisaan = 0.
+
+> **Interpretasi:** *p-value* ≈ 0,998 (> 0,05) → **gagal tolak $H_0$**, nilai tengah sisaan sama dengan nol. Asumsi **terpenuhi**.
+>
+> **Kesimpulan sisaan:** 3 dari 4 asumsi terpenuhi (kebebasan, kehomogenan ragam, nilai tengah nol); hanya normalitas yang tidak terpenuhi. Ini keterbatasan yang wajar pada data kurs harian, dan terutama memengaruhi selang kepercayaan ramalan, bukan ramalan titik.
+
+# Overfitting
+
+Orde AR dan MA model terbaik ARIMA(1,1,1) dinaikkan satu tingkat.
+
+## ARIMA(2,1,1)
+
+```{r}
+model1a.da <- Arima(train.diff, order = c(2,0,1), method = "ML")
+summary(model1a.da)
+```
+
+```{r}
+lmtest::coeftest(model1a.da)
+```
+
+## ARIMA(1,1,2)
+
+```{r}
+model1b.da <- Arima(train.diff, order = c(1,0,2), method = "ML")
+summary(model1b.da)
+```
+
+```{r}
+lmtest::coeftest(model1b.da)
+```
+
+```{r}
+overfitting <- data.frame(
+  Model = c("ARIMA(1,1,1)", "ARIMA(2,1,1)", "ARIMA(1,1,2)"),
+  AIC   = c(AIC(model3.da), AIC(model1a.da), AIC(model1b.da)),
+  BIC   = c(BIC(model3.da), BIC(model1a.da), BIC(model1b.da))
+)
+overfitting
+```
+
+> **Interpretasi:** Pada ARIMA(2,1,1) parameter tambahan ar2 tidak signifikan dan AIC lebih besar. Pada ARIMA(1,1,2) parameter ma2 tidak signifikan dan AIC juga lebih besar. Karena tidak ada perbaikan, **ARIMA(1,1,1) tetap dipertahankan** sebagai model terbaik.
+
+# Model Terbaik: ARIMA(1,1,1)
+
+```{r}
+model_terbaik <- model3.da
+summary(model_terbaik)
+lmtest::coeftest(model_terbaik)
+```
+
+> **Interpretasi:** Model: $\hat{Z}_t = 2{,}77 - 0{,}68\,Z_{t-1} + \varepsilon_t + 0{,}782\,\varepsilon_{t-1}$, dengan $Z_t = Y_t - Y_{t-1}$ (selisih kurs harian) dan $\sigma^2 \approx 1913.86$.
+
+# Peramalan
+
+```{r}
+ramalan.da <- forecast::forecast(model_terbaik, h = length(test.ts))
+```
+
+```{r}
+data.ramalan.da <- ramalan.da$mean
+plot(ramalan.da)
+```
+
+> **Interpretasi:** Ramalan pada skala selisih dengan cepat menuju rata-rata dan selang kepercayaannya melebar, karena model ARMA(1,1) yang stasioner tidak memuat struktur jangka panjang.
+
+```{r}
+# Inverse differencing
+pt_akhir_train <- tail(train.ts, 1)
+
+forecast <- diffinv(data.ramalan.da, differences = 1, xi = pt_akhir_train)
+hasil <- forecast[-1]   # buang titik awal (nilai terakhir data latih)
+
+# Bandingkan aktual vs forecast
+perbandingan.da <- cbind(
+  Aktual   = test.ts,
+  Forecast = hasil
+)
+
+print(head(perbandingan.da, 10))
+```
+
+> **Interpretasi:** Setelah *inverse differencing*, ramalan hari pertama ≈ 17004 dan naik perlahan sekitar hampir 2-4 rupiah per hari, sementara data aktual pada periode awal uji berada di sekitar 17.002-17.015. Pada rentang waktu awal ramalan sangat dekat dengan aktual.
+
+```{r}
+# Hitung akurasi
+akurasi_test <- accuracy(hasil, test.ts)
+akurasi_test
+```
+
+> **Interpretasi:** Pada 146 hari data uji diperoleh RMSE ≈ 556,6; MAE ≈ 496,9; dan MAPE ≈ 2,78%. MAPE < 3% menunjukkan ketepatan yang cukup baik untuk periode peramalan selama 146 hari, dan galat membesar seiring bertambahnya rentang waktu.
+
+```{r}
+# Pembanding: ramalan naif (kurs = nilai terakhir data latih)
+naif <- rep(as.numeric(pt_akhir_train), length(test.ts))
+accuracy(naif, test.ts)
+```
+
+> **Interpretasi:** Ramalan naif (*random walk* tanpa intercept) menghasilkan RMSE ≈ 776,4 dan MAPE ≈ 3,92%. ARIMA(1,1,1) dengan *intercept* lebih baik (RMSE 553,6; MAPE 2,77%), sehingga model layak dipakai. Keunggulannya terutama datang dari intercept positif, bukan dari struktur AR-MA (yang hanya memengaruhi beberapa hari pertama).
+
+```{r}
+# Plot data aktual vs forecast
+ts.plot(datakurs.ts, col = "black", lty = 1, xlab = "Waktu", ylab = "Kurs (IDR)",
+        main = "Aktual vs Forecast Kurs USD/IDR")
+lines((n_train+1):(n_train+length(hasil)), hasil, col = "blue", lty = 2, lwd = 2)
+legend("topleft", legend = c("Data Aktual", "Forecast"),
+       col = c("black", "blue"), lty = c(1,2), lwd = c(1,2), bty = "n")
+```
+
+> **Interpretasi:** Garis ramalan (biru putus-putus) naik landai dan berada di bawah data aktual pada sebagian besar periode uji, yang terlihat sebagai jarak yang melebar ke akhir periode.
+
+# Kesimpulan
+
+Kurs USD/IDR tidak stasioner dalam rataan dan menjadi stasioner setelah differencing satu kali (ragam juga stasioner menurut Box-Cox pada data selisih). Model terbaik adalah **ARIMA(1,1,1)** (AIC ≈ 6054,8) dengan seluruh parameter AR dan MA signifikan. Sisaan memenuhi asumsi kebebasan, kehomogenan ragam, dan nilai tengah nol; hanya normalitas yang dilanggar. Pada data uji, model menghasilkan MAPE ≈ 2,77%, lebih baik daripada ramalan naif (3,92%), tetapi ketepatan menurun untuk jangka panjang, sehingga model lebih andal untuk peramalan jangka pendek.
 
